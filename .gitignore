@@ -1,0 +1,9 @@
+# Jupyter Notebook checkpoints and caches
+**/*.ipynb_checkpoints/
+**/__pycache__/
+
+# training data and images not included
+**/dataset/**/*.jpg
+**/dataset/**/*.png
+**/dataset/**/*.txt
+
