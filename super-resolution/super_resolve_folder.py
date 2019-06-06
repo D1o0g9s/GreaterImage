@@ -93,7 +93,7 @@ input_image_filenames = [x for x in listdir(inputFolder) if is_image_file(x)]
 modelPath = args.model
 upscaleFactor = 4
 batchSize = 1
-allColors = True
+allColors = False
 
 # ===========================================================
 # input image setting
@@ -147,6 +147,7 @@ for inputFileName in input_image_filenames :
     pred = model(data)
     out = pred.clone().detach()
     out = out.cpu()
+    pred = pred.cpu()
     out_img_y = out.data[0].numpy()
     out_img_y *= 255.0
     out_img_y = out_img_y.clip(0, 255)

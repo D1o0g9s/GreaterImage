@@ -33,7 +33,7 @@ parser.add_argument('--model', '-m', type=str, default='srcnn', help='choose whi
 parser.add_argument('--trainTestFolder', '-t', default="./dataset/MyTrainTest", help="filepath of folder containing train and test images")
 
 args = parser.parse_args()
-allColors = True
+allColors = False
 
 def main():
     # ===========================================================
