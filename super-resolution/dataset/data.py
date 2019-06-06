@@ -8,6 +8,9 @@ from torchvision.transforms import Compose, CenterCrop, ToTensor, Resize
 from .dataset import DatasetFromFolder
 
 
+def get_TrainTestPath(foldername, dest="./dataset") :
+    return join(dest, foldername)
+
 def download_bsd300(dest="./dataset"):
     output_image_dir = join(dest, "BSDS300/images")
 
@@ -30,9 +33,6 @@ def download_bsd300(dest="./dataset"):
 
     return output_image_dir
 
-def get_MyTrainTest(dest="./dataset"): 
-    return join(dest, "MyTrainTest")
-
 def calculate_valid_crop_size(crop_size, upscale_factor):
     return crop_size - (crop_size % upscale_factor)
 
@@ -51,22 +51,22 @@ def target_transform(crop_size):
         ToTensor(),
     ])
 
-
-def get_training_set(upscale_factor):
-    root_dir = get_MyTrainTest() #download_bsd300()
+TrainAndTestImageSize = 256
+def get_training_set(folderpath, upscale_factor, allColors):
+    root_dir = folderpath #download_bsd300()
     train_dir = join(root_dir, "train")
-    crop_size = calculate_valid_crop_size(256, upscale_factor)
+    crop_size = calculate_valid_crop_size(TrainAndTestImageSize, upscale_factor)
 
     return DatasetFromFolder(train_dir,
                              input_transform=input_transform(crop_size, upscale_factor),
-                             target_transform=target_transform(crop_size))
+                             target_transform=target_transform(crop_size), allColors=allColors)
 
 
-def get_test_set(upscale_factor):
-    root_dir = get_MyTrainTest() #download_bsd300()
+def get_test_set(folderpath, upscale_factor, allColors):
+    root_dir = folderpath #download_bsd300()
     test_dir = join(root_dir, "test")
-    crop_size = calculate_valid_crop_size(256, upscale_factor)
+    crop_size = calculate_valid_crop_size(TrainAndTestImageSize, upscale_factor)
 
     return DatasetFromFolder(test_dir,
                              input_transform=input_transform(crop_size, upscale_factor),
-                             target_transform=target_transform(crop_size))
+                             target_transform=target_transform(crop_size), allColors=allColors)

@@ -9,7 +9,6 @@ from math import log10
 
 
 from torch.utils.data import DataLoader
-from dataset.data import get_training_set, get_test_set
 
 import numpy as np
 import cv2
@@ -38,7 +37,7 @@ def blurrify(filepath, blurWidth, blurHeight) :
 # ===========================================================
 
 parser = argparse.ArgumentParser(description='PyTorch Super Res Example')
-parser.add_argument('--input', type=str, required=False, default='/home/ic/Desktop/super-resolution/dataset/BSDS300/images/val/3096.jpg', help='input image to use')
+parser.add_argument('--input', type=str, required=False, default='/Users/glchau/Box/FinalProject/super-resolution/images_input/butterfly.png', help='input image to use')
 parser.add_argument('--model', type=str, default='model_path.pth', help='model file to use')
 parser.add_argument('--output', type=str, default='test.jpg', help='where to save the output image')
 args = parser.parse_args()
@@ -88,9 +87,9 @@ original_y, original_cb, original_cr = original_img.split()
 # ===========================================================
 device = torch.device('cuda' if GPU_IN_USE else 'cpu')
 model = torch.load(modelPath, map_location=lambda storage, loc: storage)
-#model = model.to(device)
+model = model.to(device)
 data = (ToTensor()(y)).view(1, -1, y.size[1], y.size[0])
-#data = data.to(device)
+data = data.to(device)
 
 if GPU_IN_USE:
     cudnn.benchmark = True
