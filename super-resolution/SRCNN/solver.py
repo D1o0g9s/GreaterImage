@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 
 print1 = False
 inputChannels = 1 # number of channels to input into CNN
-baseFilter = 64 # number of channels to output in the first Conv layer in CNN
+baseFilter = 128 # number of channels to output in the first Conv layer in CNN
 
 class SRCNNTrainer(object):
     def __init__(self, config, training_loader, testing_loader):

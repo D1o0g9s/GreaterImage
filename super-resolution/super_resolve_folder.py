@@ -115,7 +115,7 @@ for inputFileName in input_image_filenames :
     im.save(myBlurryFile)
 
     # Blur the image and save
-    blurrify(myBlurryFile, width // 50, height // 50)
+    blurrify(myBlurryFile, width // 100, height // 100)
 
     # Downscale the image by the upscale factor
     downscale(myBlurryFile, upscaleFactor)
