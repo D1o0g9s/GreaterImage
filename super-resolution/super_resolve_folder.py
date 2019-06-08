@@ -93,7 +93,7 @@ input_image_filenames = [x for x in listdir(inputFolder) if is_image_file(x)]
 modelPath = args.model
 upscaleFactor = 4
 batchSize = 1
-allColors = False
+allColors = True
 
 # ===========================================================
 # input image setting
@@ -114,7 +114,7 @@ for inputFileName in input_image_filenames :
     width, height = im.size
     im.save(myBlurryFile)
 
-    # Blur the image and save
+    # Blur the image and save (100 is less blur)
     blurrify(myBlurryFile, width // 100, height // 100)
 
     # Downscale the image by the upscale factor
