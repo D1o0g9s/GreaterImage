@@ -81,6 +81,7 @@ parser.add_argument('--inputFolder', type=str, required=False, default='./images
 parser.add_argument('--outputFolder', type=str, required=False, default='./images_output', help='where to save outputs')
 parser.add_argument('--compareFolder', type=str, required=False, default='./images_compare', help='where to save comparison images')
 parser.add_argument('--model', type=str, default='model_path.pth', help='model file to use')
+parser.add_argument('--outputBW', type=str, default='n', help='y for output black and white, n for not')
 args = parser.parse_args()
 
 
@@ -93,7 +94,8 @@ input_image_filenames = [x for x in listdir(inputFolder) if is_image_file(x)]
 modelPath = args.model
 upscaleFactor = 4
 batchSize = 1
-allColors = True
+outputBW = True if args.outputBW == 'y' else False
+allColors = False
 
 # ===========================================================
 # input image setting
@@ -152,8 +154,8 @@ for inputFileName in input_image_filenames :
     out_img_y *= 255.0
     out_img_y = out_img_y.clip(0, 255)
     out_img_y = Image.fromarray(np.uint8(out_img_y[0]), mode='L')
-    
-    if (allColors) :
+
+    if (not outputBW and allColors) :
         data_cb = (ToTensor()(cb)).view(1, -1, cb.size[1], cb.size[0])
         data_cb = data_cb.to(device)
         pred_cb = model(data_cb)
@@ -171,10 +173,13 @@ for inputFileName in input_image_filenames :
         out_img_cr *= 255.0
         out_img_cr = out_img_cr.clip(0, 255)
         out_img_cr = Image.fromarray(np.uint8(out_img_cr[0]), mode='L')
-    else :
+    elif (not outputBW):
         # original
         out_img_cb = cb.resize(out_img_y.size, Image.BICUBIC)
         out_img_cr = cr.resize(out_img_y.size, Image.BICUBIC)
+    elif (outputBW) :
+        out_img_cb = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y.size).numpy())), mode='L')
+        out_img_cr = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y.size).numpy())), mode='L')
     
     out_img = Image.merge('YCbCr', [out_img_y, out_img_cb, out_img_cr]).convert('RGB')
     outputPath = join(outputFolder, "output_" + inputFileName)
@@ -191,7 +196,7 @@ for inputFileName in input_image_filenames :
     criterion = torch.nn.MSELoss()
     mse = criterion(pred, original_data)
 
-    if(allColors) :
+    if(not outputBW and allColors) :
         original_data_cb = (ToTensor()(original_cb)).view(1, -1, original_cb.size[1], original_cb.size[0])
         original_data_cr = (ToTensor()(original_cr)).view(1, -1, original_cr.size[1], original_cr.size[0])
         pred, original_data_cb = enshape(pred, original_data_cb)
