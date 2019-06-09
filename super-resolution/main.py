@@ -28,18 +28,20 @@ parser.add_argument('--seed', type=int, default=123, help='random seed to use. D
 # model configuration
 parser.add_argument('--upscale_factor', '-uf',  type=int, default=4, help="super resolution upscale factor")
 parser.add_argument('--model', '-m', type=str, default='srcnn', help='choose which model is going to use')
-
+parser.add_argument('--allColors', '-a', type=str, default='true', help='true or false: true to train on cr and cb in addtion to y')
 # training and testing folder
 parser.add_argument('--trainTestFolder', '-t', default="./dataset/MyTrainTest", help="filepath of folder containing train and test images")
 
 args = parser.parse_args()
-allColors = True
+allColors = True if args.allColors.strip().lower() == 'true' else False 
 
 def main():
     # ===========================================================
     # Set train dataset & test dataset
     # ===========================================================
     print('===> Loading datasets')
+    print("allColors is " + str(allColors))
+
     train_set = get_training_set(args.trainTestFolder, args.upscale_factor, allColors)
     test_set = get_test_set(args.trainTestFolder, args.upscale_factor, allColors)
     training_data_loader = DataLoader(dataset=train_set, batch_size=args.batchSize, shuffle=True)
