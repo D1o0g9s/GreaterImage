@@ -80,8 +80,9 @@ parser = argparse.ArgumentParser(description='PyTorch Super Res Example')
 parser.add_argument('--inputFolder', type=str, required=False, default='./images_input', help='input image folder to use')
 parser.add_argument('--outputFolder', type=str, required=False, default='./images_output', help='where to save outputs')
 parser.add_argument('--compareFolder', type=str, required=False, default='./images_compare', help='where to save comparison images')
-parser.add_argument('--model', type=str, default='model_path.pth', help='model file to use')
-parser.add_argument('--outputBW', type=str, default='n', help='y for output black and white, n for not')
+parser.add_argument('--model', '-m', type=str, default='model_path.pth', help='model file to use')
+parser.add_argument('--outputBW', type=str, default='true', help='true for output black and white, false for not')
+parser.add_argument('--verbose', '-v', type=str, default='true', help='true for verbose output, false for not')
 args = parser.parse_args()
 
 
@@ -94,7 +95,9 @@ input_image_filenames = [x for x in listdir(inputFolder) if is_image_file(x)]
 modelPath = args.model
 upscaleFactor = 4
 batchSize = 1
-outputBW = True if args.outputBW == 'y' else False
+outputBW = True if args.outputBW.strip().lower() == 'true' else False
+verbose = True if args.verbose.strip().lower() == 'true' else False
+
 allColors = False
 
 # ===========================================================
@@ -104,7 +107,23 @@ GPU_IN_USE = torch.cuda.is_available()
 myBlurryFile = 'blurry.jpg'
 psnrs = list()
 
+results_output_file = open(join(outputFolder, "results.txt"),"w+")
+results_compare_file = open(join(compareFolder, "results.txt"),"w+")
+image_count = 0
+
+report_string = "resolving image with " + modelPath + " upscaleFactor " + str(4) + " BWouput=" +  str(outputBW) + " allColors=" + str(allColors)
+print(report_string)
+results_output_file.write(report_string)
+results_compare_file.write(report_string)
+
 for inputFileName in input_image_filenames : 
+    
+    image_count += 1
+    if(image_count == 1 or image_count % 100 == 0) : 
+        print(image_count, end="")
+    else : 
+        print(".", end="")
+    
     inputFilePath = join(inputFolder, inputFileName)
     
     # Get the original image for testing purposes
@@ -206,8 +225,11 @@ for inputFileName in input_image_filenames :
         mse = mse / 3
 
     psnr = 10 * log10(1 / mse.item())
-    print(inputFileName + " psnr between original = " + str(psnr))
-
+    report_string = inputFileName + "\t psnr between original = " + str(psnr)
+    if(verbose) :
+        print(report_string)
+    results_output_file.write(report_string)
+    results_compare_file.write(report_string)
     upscale(myBlurryFile, upscaleFactor)
     blurry_img = Image.open(myBlurryFile).convert('RGB')
     original_img = Image.open(inputFilePath).convert('RGB')
@@ -222,5 +244,10 @@ for inputFileName in input_image_filenames :
 
     psnrs.append(psnr)
 
+report_string = str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(psnrs))
 print(str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(psnrs)))
+results_output_file.write(report_string)
+results_compare_file.write(report_string)
+results_output_file.close() 
+results_compare_file.close() 
 
