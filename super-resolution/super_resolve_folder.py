@@ -21,6 +21,9 @@ from os.path import join
 from os import listdir
 import os
 
+from skimage.measure import compare_ssim as ssim
+
+
 # ===========================================================
 # helper functions
 # ===========================================================
@@ -221,7 +224,7 @@ for inputFileName in input_image_filenames :
         out_img_cb = Image.fromarray(np.uint8(out_img_cb[0]), mode='L')
         #  print(out_img_cb)
         data_cr = (ToTensor()(cr)).view(1, -1, cr.size[1], cr.size[0])
-        if print1 and inputFileName == 'img_002.png': 
+        if print1 and inputFileName == '3096.jpg': 
             print("pred shape ", pred.shape)
             plt.imshow(pred[0, 0].detach().numpy()),plt.title('pred')
             plt.xticks([]), plt.yticks([])
@@ -236,7 +239,7 @@ for inputFileName in input_image_filenames :
         data_cr = data_cr.to(device)
         pred_cr = model_cr(data_cr)
 
-        if print1 and inputFileName == 'img_002.png': 
+        if print1 and inputFileName == '3096.jpg': 
 
             print("data_cb shape ", data_cb.shape)
             plt.imshow(data_cb[0, 0].detach().numpy()),plt.title('data_cb')
@@ -289,20 +292,20 @@ for inputFileName in input_image_filenames :
 
     original_data = (ToTensor()(original_y)).view(1, -1, original_y.size[1], original_y.size[0])
     pred, original_data = enshape(pred, original_data)
-    criterion = torch.nn.MSELoss()
-    mse = criterion(pred, original_data)
+    criterion = ssim #torch.nn.MSELoss()
+    ssim_mse = criterion(pred[0,0].detach().numpy(), original_data[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
 
     if(not outputBW and allColors) :
         original_data_cb = (ToTensor()(original_cb)).view(1, -1, original_cb.size[1], original_cb.size[0])
         original_data_cr = (ToTensor()(original_cr)).view(1, -1, original_cr.size[1], original_cr.size[0])
         pred_cb, original_data_cb = enshape(pred_cb, original_data_cb)
         pred_cr, original_data_cr = enshape(pred_cr, original_data_cr)
-        mse += criterion(pred_cr, original_data_cr)
-        mse += criterion(pred_cb, original_data_cb)
-        mse = mse / 3
+        ssim_mse += criterion(pred_cr[0,0].detach().numpy(), original_data_cr[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
+        ssim_mse += criterion(pred_cb[0,0].detach().numpy(), original_data_cb[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
+        ssim_mse = ssim_mse / 3
 
-    psnr = 10 * log10(1 / mse.item())
-    report_string = inputFileName + "\t psnr between original = " + str(psnr) + "\n"
+    ssim_value = ssim_mse.item() #10 * log10(1 / mse.item())
+    report_string = inputFileName + "\t ssim between original = " + str(ssim_value) + "\n"
     if(verbose) :
         print(report_string, end="")
     results_output_file.write(report_string)
@@ -314,12 +317,12 @@ for inputFileName in input_image_filenames :
     compare_img = concat_images(np.array(blurry_img), np.array(out_img))
     compare_img = Image.fromarray(concat_images(np.array(compare_img), np.array(original_img)).astype('uint8'))
     draw = ImageDraw.Draw(compare_img)
-    draw.text((0, 0),"PSNR " + str(psnr), fill=(255,255,255))
+    draw.text((0, 0),"SSIM " + str(ssim_value), fill=(255,255,255))
 
     comparePath = join(compareFolder, "compare_" + inputFileName)
     compare_img.save(comparePath)
 
-    psnrs.append(psnr)
+    psnrs.append(ssim_value)
 
 report_string = str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(psnrs)) + "\n"
 print(report_string, end="")

@@ -20,12 +20,13 @@ class SRCNNTrainer(object):
         super(SRCNNTrainer, self).__init__()
         self.CUDA = torch.cuda.is_available()
         self.device = torch.device('cuda' if self.CUDA else 'cpu')
+        print("device: ", self.device)
         self.models = None
         self.lr = config.lr
         self.nEpochs = config.nEpochs
         self.criterion = None
         self.optimizers = None
-        self.scheduler = None
+        self.schedulers = None
         self.seed = config.seed
         self.upscale_factor = config.upscale_factor
         self.training_loader = training_loader
@@ -40,7 +41,8 @@ class SRCNNTrainer(object):
             self.models[i] = Net(num_channels=inputChannels, base_filter=baseFilter, upscale_factor=self.upscale_factor).to(self.device)
             self.models[i].weight_init(mean=0.0, std=0.01)
             self.optimizers[i] = torch.optim.Adam(self.models[i].parameters(), lr=self.lr)
-        
+            self.schedulers[i] = torch.optim.lr_scheduler.MultiStepLR(self.optimizers[i], milestones=[50, 75, 100], gamma=0.5)
+
         self.criterion = torch.nn.MSELoss()
         torch.manual_seed(self.seed)
 
@@ -50,7 +52,6 @@ class SRCNNTrainer(object):
             self.criterion.cuda()
 
         
-        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizers[i], milestones=[50, 75, 100], gamma=0.5)
 
     def save_model(self):
         model_path = self.outputFilepath.split(".")
@@ -130,6 +131,7 @@ class SRCNNTrainer(object):
             print("\n===> Epoch {} starts:".format(epoch))
             self.train()
             self.test()
-            self.scheduler.step(epoch)
+            for i in range(self.numModels) : 
+                self.schedulers[i].step(epoch)
             if epoch == self.nEpochs:
                 self.save_model()
