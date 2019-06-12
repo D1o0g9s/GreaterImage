@@ -37,6 +37,7 @@ class SRCNNTrainer(object):
     def build_model(self):
         self.models = dict() 
         self.optimizers = dict() 
+        self.schedulers = dict()
         for i in range(self.numModels): 
             self.models[i] = Net(num_channels=inputChannels, base_filter=baseFilter, upscale_factor=self.upscale_factor).to(self.device)
             self.models[i].weight_init(mean=0.0, std=0.01)
