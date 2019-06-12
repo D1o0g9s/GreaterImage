@@ -11,9 +11,10 @@ from matplotlib import pyplot as plt
 
 
 print1 = False
+print2 = False
 inputChannels = 1 # number of channels to input into CNN
 baseFilter = 64 # number of channels to output in the first Conv layer in CNN
-
+theEpoch = 0
 class SRCNNTrainer(object):
     def __init__(self, config, training_loader, testing_loader, allLayers):
         super(SRCNNTrainer, self).__init__()
@@ -30,6 +31,7 @@ class SRCNNTrainer(object):
         self.training_loader = training_loader
         self.testing_loader = testing_loader
         self.numModels = 3 if allLayers else 1
+        self.outputFilepath = config.outputPath
 
     def build_model(self):
         self.models = dict() 
@@ -51,9 +53,10 @@ class SRCNNTrainer(object):
         self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizers[i], milestones=[50, 75, 100], gamma=0.5)
 
     def save_model(self):
-        model_out_name = "model_path"
+        model_path = self.outputFilepath.split(".")
+        model_out_name = model_path[0]
         model_out_extender = ""
-        model_out_extension = ".pth"
+        model_out_extension = "." + model_path[1]
         for i in range(self.numModels) :
             torch.save(self.models[i], model_out_name + model_out_extender + model_out_extension)
             for param_tensor in self.models[i].state_dict():
@@ -70,6 +73,14 @@ class SRCNNTrainer(object):
         for batch_num, (datas, targets) in enumerate(self.training_loader):
             for i in range(len(datas)) : 
                 data, target = datas[i].to(self.device), targets[i].to(self.device)
+                global print2
+                if print2 and batch_num == 0 and theEpoch == 1: 
+                    print("data shape ", data.shape)
+                    plt.imshow(data.data[0, 0, :, :].numpy()),plt.title('data')
+                    plt.xticks([]), plt.yticks([])
+                    plt.show()
+                    if i == 2 : 
+                        print2 = False
                 self.optimizers[i].zero_grad()
                 loss = self.criterion(self.models[i](data), target) / len(datas)
                 train_loss += loss.item()
@@ -91,7 +102,7 @@ class SRCNNTrainer(object):
                     data, target = datas[i].to(self.device), targets[i].to(self.device)
                     prediction = self.models[i](data)
                     global print1
-                    if print1 and batch_num > 100 and i > 0: 
+                    if print1 and batch_num == 0 and theEpoch == self.nEpochs: 
                         print("data shape ", data.shape)
                         plt.imshow(data.data[0, 0, :, :].numpy()),plt.title('data')
                         plt.xticks([]), plt.yticks([])
@@ -101,7 +112,9 @@ class SRCNNTrainer(object):
                         plt.imshow(prediction[0, 0]),plt.title('prediction')
                         plt.xticks([]), plt.yticks([])
                         plt.show()
-                        print1 = False
+
+                        if i == 2 : 
+                            print1 = False
                     mse = self.criterion(prediction, target) / len(datas)
                     psnr = 10 * log10(1 / mse.item())
                     avg_psnr += psnr
@@ -112,6 +125,8 @@ class SRCNNTrainer(object):
     def run(self):
         self.build_model()
         for epoch in range(1, self.nEpochs + 1):
+            global theEpoch
+            theEpoch = epoch
             print("\n===> Epoch {} starts:".format(epoch))
             self.train()
             self.test()

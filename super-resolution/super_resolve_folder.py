@@ -141,6 +141,7 @@ pathExtension=""
 modelPath = modelPath.split(".")
 for i in range(numModels) :
     models[i] = torch.load(modelPath[0] + pathExtension + "." + modelPath[1], map_location=lambda storage, loc: storage) 
+    print(modelPath[0] + pathExtension + "." + modelPath[1])
     pathExtension = pathExtension + "_"
     models[i] = models[i].to(device)
     models[i].eval()
@@ -213,22 +214,39 @@ for inputFileName in input_image_filenames :
         
         pred_cb = model_cb(data_cb)
         out_cb = pred_cb.clone().detach()
+
         out_img_cb = out_cb.data[0].numpy()
         out_img_cb *= 255.0
         out_img_cb = out_img_cb.clip(0, 255)
         out_img_cb = Image.fromarray(np.uint8(out_img_cb[0]), mode='L')
         #  print(out_img_cb)
         data_cr = (ToTensor()(cr)).view(1, -1, cr.size[1], cr.size[0])
-        data_cr = data_cr.to(device)
-        pred_cr = model_cr(data_cr)
-
         if print1 and inputFileName == 'img_002.png': 
-
             print("pred shape ", pred.shape)
             plt.imshow(pred[0, 0].detach().numpy()),plt.title('pred')
             plt.xticks([]), plt.yticks([])
             plt.show()
 
+
+            print("data_cb shape ", data_cb.shape)
+            plt.imshow(data_cb[0, 0].detach().numpy()),plt.title('data_cb')
+            plt.xticks([]), plt.yticks([])
+            plt.show()
+
+        data_cr = data_cr.to(device)
+        pred_cr = model_cr(data_cr)
+
+        if print1 and inputFileName == 'img_002.png': 
+
+            print("data_cb shape ", data_cb.shape)
+            plt.imshow(data_cb[0, 0].detach().numpy()),plt.title('data_cb')
+            plt.xticks([]), plt.yticks([])
+            plt.show()
+
+            print("pred_cb shape ", pred_cb.shape)
+            plt.imshow(pred_cb[0, 0].detach().numpy()),plt.title('pred_cb')
+            plt.xticks([]), plt.yticks([])
+            plt.show()
 
             print("data_cr shape ", data_cr.shape)
             plt.imshow(data_cr[0, 0]),plt.title('data_cr')
@@ -240,6 +258,8 @@ for inputFileName in input_image_filenames :
             plt.xticks([]), plt.yticks([])
             plt.show()
             print1 = False
+
+
 
         out_cr = pred_cr.clone().detach()
         out_img_cr = out_cr.data[0].numpy()

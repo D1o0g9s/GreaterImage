@@ -51,7 +51,7 @@ def target_transform(crop_size):
         ToTensor(),
     ])
 
-TrainAndTestImageSize = 512
+TrainAndTestImageSize = 256
 def get_training_set(folderpath, upscale_factor, allColors):
     root_dir = folderpath #download_bsd300()
     train_dir = join(root_dir, "train")

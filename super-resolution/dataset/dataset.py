@@ -4,6 +4,8 @@ from os.path import join
 import torch.utils.data as data
 from PIL import Image
 
+from matplotlib import pyplot as plt
+
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in [".png", ".jpg", ".jpeg"])
@@ -14,7 +16,7 @@ def load_img(filepath):
     y, cb, cr = img.split()
     return y, cb, cr
 
-
+print1 = False
 class DatasetFromFolder(data.Dataset):
     def __init__(self, image_dir, input_transform=None, target_transform=None, allColors=False):
         super(DatasetFromFolder, self).__init__()
@@ -43,6 +45,13 @@ class DatasetFromFolder(data.Dataset):
             if self.target_transform: 
                 target_cb = self.target_transform(target_cb)
                 target_cr = self.target_transform(target_cr)
+            global print1
+            if print1 : 
+                print("cr shape ", cr.shape)
+                plt.imshow(cr.data[0, :, :].numpy()),plt.title('cr')
+                plt.xticks([]), plt.yticks([])
+                plt.show()
+                print1=False
             input_images = [input_image, cb, cr]
             targets = [target, target_cb, target_cr]
         else : 
