@@ -12,27 +12,33 @@ from matplotlib import pyplot as plt
 
 print1 = False
 inputChannels = 1 # number of channels to input into CNN
-baseFilter = 128 # number of channels to output in the first Conv layer in CNN
+baseFilter = 64 # number of channels to output in the first Conv layer in CNN
 
 class SRCNNTrainer(object):
-    def __init__(self, config, training_loader, testing_loader):
+    def __init__(self, config, training_loader, testing_loader, allLayers):
         super(SRCNNTrainer, self).__init__()
         self.CUDA = torch.cuda.is_available()
         self.device = torch.device('cuda' if self.CUDA else 'cpu')
-        self.model = None
+        self.models = None
         self.lr = config.lr
         self.nEpochs = config.nEpochs
         self.criterion = None
-        self.optimizer = None
+        self.optimizers = None
         self.scheduler = None
         self.seed = config.seed
         self.upscale_factor = config.upscale_factor
         self.training_loader = training_loader
         self.testing_loader = testing_loader
+        self.numModels = 3 if allLayers else 1
 
     def build_model(self):
-        self.model = Net(num_channels=inputChannels, base_filter=baseFilter, upscale_factor=self.upscale_factor).to(self.device)
-        self.model.weight_init(mean=0.0, std=0.01)
+        self.models = dict() 
+        self.optimizers = dict() 
+        for i in range(self.numModels): 
+            self.models[i] = Net(num_channels=inputChannels, base_filter=baseFilter, upscale_factor=self.upscale_factor).to(self.device)
+            self.models[i].weight_init(mean=0.0, std=0.01)
+            self.optimizers[i] = torch.optim.Adam(self.models[i].parameters(), lr=self.lr)
+        
         self.criterion = torch.nn.MSELoss()
         torch.manual_seed(self.seed)
 
@@ -41,43 +47,58 @@ class SRCNNTrainer(object):
             cudnn.benchmark = True
             self.criterion.cuda()
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[50, 75, 100], gamma=0.5)
+        
+        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizers[i], milestones=[50, 75, 100], gamma=0.5)
 
     def save_model(self):
-        model_out_path = "model_path.pth"
-        torch.save(self.model, model_out_path)
-        print("Checkpoint saved to {}".format(model_out_path))
+        model_out_name = "model_path"
+        model_out_extender = ""
+        model_out_extension = ".pth"
+        for i in range(self.numModels) :
+            torch.save(self.models[i], model_out_name + model_out_extender + model_out_extension)
+            for param_tensor in self.models[i].state_dict():
+                print(param_tensor, "\t", self.models[i].state_dict()[param_tensor].size())
+            model_out_extender = model_out_extender + "_"
+
+
+        print("Checkpoint saved to {}".format(model_out_name))
 
     def train(self):
-        self.model.train()
+        for i in range(self.numModels): 
+            self.models[i].train()
         train_loss = 0
         for batch_num, (datas, targets) in enumerate(self.training_loader):
             for i in range(len(datas)) : 
                 data, target = datas[i].to(self.device), targets[i].to(self.device)
-                self.optimizer.zero_grad()
-                loss = self.criterion(self.model(data), target) / len(datas)
+                self.optimizers[i].zero_grad()
+                loss = self.criterion(self.models[i](data), target) / len(datas)
                 train_loss += loss.item()
                 loss.backward()
-                self.optimizer.step()
+                self.optimizers[i].step()
             progress_bar(batch_num, len(self.training_loader), 'Loss: %.4f' % (train_loss / (batch_num + 1)))
 
         print("    Average Loss: {:.4f}".format(train_loss / len(self.training_loader)))
 
     
     def test(self):
-        self.model.eval()
+        for i in range(self.numModels): 
+            self.models[i].eval()
         avg_psnr = 0
-
+        
         with torch.no_grad():
             for batch_num, (datas, targets) in enumerate(self.testing_loader):
                 for i in range(len(datas)) : 
                     data, target = datas[i].to(self.device), targets[i].to(self.device)
-                    prediction = self.model(data)
+                    prediction = self.models[i](data)
                     global print1
-                    if print1: 
+                    if print1 and batch_num > 100 and i > 0: 
                         print("data shape ", data.shape)
                         plt.imshow(data.data[0, 0, :, :].numpy()),plt.title('data')
+                        plt.xticks([]), plt.yticks([])
+                        plt.show()
+
+                        print("prediction shape ", prediction.shape)
+                        plt.imshow(prediction[0, 0]),plt.title('prediction')
                         plt.xticks([]), plt.yticks([])
                         plt.show()
                         print1 = False

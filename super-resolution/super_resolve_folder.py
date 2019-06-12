@@ -12,12 +12,14 @@ from math import log10
 
 from torch.utils.data import DataLoader
 from dataset.dataset import DatasetFromFolder, is_image_file
+from SRCNN.model import Net
 
 import numpy as np
 import cv2
 from matplotlib import pyplot as plt
 from os.path import join
 from os import listdir
+import os
 
 # ===========================================================
 # helper functions
@@ -81,8 +83,11 @@ parser.add_argument('--inputFolder', type=str, required=False, default='./images
 parser.add_argument('--outputFolder', type=str, required=False, default='./images_output', help='where to save outputs')
 parser.add_argument('--compareFolder', type=str, required=False, default='./images_compare', help='where to save comparison images')
 parser.add_argument('--model', '-m', type=str, default='model_path.pth', help='model file to use')
-parser.add_argument('--outputBW', type=str, default='true', help='true for output black and white, false for not')
+parser.add_argument('--outputBW', '-b', type=str, default='false', help='true for output black and white, false for not')
 parser.add_argument('--verbose', '-v', type=str, default='true', help='true for verbose output, false for not')
+parser.add_argument('--allColors', '-ac', type=str, default='false', help='true or false: true to train on cr and cb in addtion to y')
+parser.add_argument('--allLayers', '-al', type=str, default='false', help='true or false: true to train 3 separate neural network layers to predict color.')
+
 args = parser.parse_args()
 
 
@@ -98,7 +103,10 @@ batchSize = 1
 outputBW = True if args.outputBW.strip().lower() == 'true' else False
 verbose = True if args.verbose.strip().lower() == 'true' else False
 
-allColors = False
+allColors = True if args.allColors.strip().lower() == 'true' else False 
+allLayers = True if args.allLayers.strip().lower() == 'true' else False 
+
+
 
 # ===========================================================
 # input image setting
@@ -107,14 +115,43 @@ GPU_IN_USE = torch.cuda.is_available()
 myBlurryFile = 'blurry.jpg'
 psnrs = list()
 
+if not os.path.exists(outputFolder) :
+    os.makedirs(outputFolder)
+if not os.path.exists(compareFolder) : 
+    os.makedirs(compareFolder)
+
 results_output_file = open(join(outputFolder, "results.txt"),"w+")
 results_compare_file = open(join(compareFolder, "results.txt"),"w+")
 image_count = 0
 
-report_string = "resolving image with " + modelPath + " upscaleFactor " + str(4) + " BWouput=" +  str(outputBW) + " allColors=" + str(allColors)
+report_string = "resolving image with " + modelPath + " upscaleFactor " + str(4) + " BWouput=" +  str(outputBW) + " allColors=" + str(allColors) + " allLayers=" + str(allLayers) +"\n"
 print(report_string)
 results_output_file.write(report_string)
 results_compare_file.write(report_string)
+
+print1 = False
+
+# ===========================================================
+# model import & setting
+# ===========================================================
+numModels = 3 if allLayers else 1
+device = torch.device('cuda' if GPU_IN_USE else 'cpu')
+models = dict() 
+pathExtension=""
+modelPath = modelPath.split(".")
+for i in range(numModels) :
+    models[i] = torch.load(modelPath[0] + pathExtension + "." + modelPath[1], map_location=lambda storage, loc: storage) 
+    pathExtension = pathExtension + "_"
+    models[i] = models[i].to(device)
+    models[i].eval()
+
+model_y = models[0]
+if(allLayers) : 
+    model_cb = models[1]
+    model_cr = models[2]
+else : 
+    model_cb = models[0]
+    model_cr = models[0]
 
 for inputFileName in input_image_filenames : 
     
@@ -149,12 +186,7 @@ for inputFileName in input_image_filenames :
     blurry_img = Image.open(myBlurryFile).convert('YCbCr')
     y, cb, cr = blurry_img.split()
 
-    # ===========================================================
-    # model import & setting
-    # ===========================================================
-    device = torch.device('cuda' if GPU_IN_USE else 'cpu')
-    model = torch.load(modelPath, map_location=lambda storage, loc: storage)
-    model = model.to(device)
+
     data = (ToTensor()(y)).view(1, -1, y.size[1], y.size[0])
     data = data.to(device)
 
@@ -165,11 +197,12 @@ for inputFileName in input_image_filenames :
     # ===========================================================
     # output and save image
     # ===========================================================
-    pred = model(data)
+    pred = models[0](data)
     out = pred.clone().detach()
     out = out.cpu()
     pred = pred.cpu()
     out_img_y = out.data[0].numpy()
+
     out_img_y *= 255.0
     out_img_y = out_img_y.clip(0, 255)
     out_img_y = Image.fromarray(np.uint8(out_img_y[0]), mode='L')
@@ -177,18 +210,42 @@ for inputFileName in input_image_filenames :
     if (not outputBW and allColors) :
         data_cb = (ToTensor()(cb)).view(1, -1, cb.size[1], cb.size[0])
         data_cb = data_cb.to(device)
-        pred_cb = model(data_cb)
+        
+        pred_cb = model_cb(data_cb)
         out_cb = pred_cb.clone().detach()
         out_img_cb = out_cb.data[0].numpy()
         out_img_cb *= 255.0
         out_img_cb = out_img_cb.clip(0, 255)
         out_img_cb = Image.fromarray(np.uint8(out_img_cb[0]), mode='L')
-
+        #  print(out_img_cb)
         data_cr = (ToTensor()(cr)).view(1, -1, cr.size[1], cr.size[0])
         data_cr = data_cr.to(device)
-        pred_cr = model(data_cr)
+        pred_cr = model_cr(data_cr)
+
+        if print1 and inputFileName == 'img_002.png': 
+
+            print("pred shape ", pred.shape)
+            plt.imshow(pred[0, 0].detach().numpy()),plt.title('pred')
+            plt.xticks([]), plt.yticks([])
+            plt.show()
+
+
+            print("data_cr shape ", data_cr.shape)
+            plt.imshow(data_cr[0, 0]),plt.title('data_cr')
+            plt.xticks([]), plt.yticks([])
+            plt.show()
+
+            print("pred_cr shape ", pred_cr.shape)
+            plt.imshow(pred_cr[0, 0].detach().numpy()),plt.title('pred_cr')
+            plt.xticks([]), plt.yticks([])
+            plt.show()
+            print1 = False
+
         out_cr = pred_cr.clone().detach()
         out_img_cr = out_cr.data[0].numpy()
+
+        
+        #print(out_img_cr)
         out_img_cr *= 255.0
         out_img_cr = out_img_cr.clip(0, 255)
         out_img_cr = Image.fromarray(np.uint8(out_img_cr[0]), mode='L')
@@ -218,16 +275,16 @@ for inputFileName in input_image_filenames :
     if(not outputBW and allColors) :
         original_data_cb = (ToTensor()(original_cb)).view(1, -1, original_cb.size[1], original_cb.size[0])
         original_data_cr = (ToTensor()(original_cr)).view(1, -1, original_cr.size[1], original_cr.size[0])
-        pred, original_data_cb = enshape(pred, original_data_cb)
-        pred, original_data_cr = enshape(pred, original_data_cr)
+        pred_cb, original_data_cb = enshape(pred_cb, original_data_cb)
+        pred_cr, original_data_cr = enshape(pred_cr, original_data_cr)
         mse += criterion(pred_cr, original_data_cr)
         mse += criterion(pred_cb, original_data_cb)
         mse = mse / 3
 
     psnr = 10 * log10(1 / mse.item())
-    report_string = inputFileName + "\t psnr between original = " + str(psnr)
+    report_string = inputFileName + "\t psnr between original = " + str(psnr) + "\n"
     if(verbose) :
-        print(report_string)
+        print(report_string, end="")
     results_output_file.write(report_string)
     results_compare_file.write(report_string)
     upscale(myBlurryFile, upscaleFactor)
@@ -244,8 +301,8 @@ for inputFileName in input_image_filenames :
 
     psnrs.append(psnr)
 
-report_string = str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(psnrs))
-print(str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(psnrs)))
+report_string = str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(psnrs)) + "\n"
+print(report_string, end="")
 results_output_file.write(report_string)
 results_compare_file.write(report_string)
 results_output_file.close() 

@@ -45,9 +45,9 @@ class DatasetFromFolder(data.Dataset):
                 target_cr = self.target_transform(target_cr)
             input_images = [input_image, cb, cr]
             targets = [target, target_cb, target_cr]
-            
-        input_images = [input_image]
-        targets = [target]
+        else : 
+            input_images = [input_image]
+            targets = [target]
 
         return input_images, targets
 
