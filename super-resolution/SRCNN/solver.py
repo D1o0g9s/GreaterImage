@@ -8,6 +8,7 @@ import torch.backends.cudnn as cudnn
 from SRCNN.model import Net
 from progress_bar import progress_bar
 from matplotlib import pyplot as plt
+import numpy as np
 
 
 print1 = False
@@ -15,24 +16,36 @@ print2 = False
 inputChannels = 1 # number of channels to input into CNN
 baseFilter = 64 # number of channels to output in the first Conv layer in CNN
 theEpoch = 0
+
+def baseline(arr) :
+    return arr - np.nanmean(arr) 
+
+def original(arr):
+    return arr
+
+def unbaseline(arr, arr_unbaselined) :
+    return arr + np.nanmean(arr_unbaselined)
+
 class SRCNNTrainer(object):
-    def __init__(self, config, training_loader, testing_loader, allLayers):
+    def __init__(self, config, training_loader, testing_loader):
         super(SRCNNTrainer, self).__init__()
         self.CUDA = torch.cuda.is_available()
         self.device = torch.device('cuda' if self.CUDA else 'cpu')
         print("device: ", self.device)
-        self.models = None
         self.lr = config.lr
         self.nEpochs = config.nEpochs
-        self.criterion = None
-        self.optimizers = None
-        self.schedulers = None
         self.seed = config.seed
         self.upscale_factor = config.upscale_factor
         self.training_loader = training_loader
         self.testing_loader = testing_loader
+
+        allLayers = True if config.allLayers.strip().lower() == 'true' else False 
+
         self.numModels = 3 if allLayers else 1
         self.outputFilepath = config.outputPath
+        self.predictColors = True if config.predictColors.strip().lower() == 'true' else False
+        self.prepArr = baseline if self.predictColors else original
+        self.unprepArr = unbaseline if self.predictColors else original
 
     def build_model(self):
         self.models = dict() 
@@ -68,23 +81,37 @@ class SRCNNTrainer(object):
 
         print("Checkpoint saved to {}".format(model_out_name))
 
+
+
     def train(self):
         for i in range(self.numModels): 
             self.models[i].train()
         train_loss = 0
         for batch_num, (datas, targets) in enumerate(self.training_loader):
             for i in range(len(datas)) : 
-                data, target = datas[i].to(self.device), targets[i].to(self.device)
+                data_unbaselined = datas[i if not self.predictColors else 0]
+                data = self.prepArr(data_unbaselined).to(self.device)
+
+                target_unbaselined = targets[i]
+                target = self.prepArr(target_unbaselined).to(self.device)
+
+                prediction = self.models[i](data)
                 global print2
-                if print2 and batch_num == 0 and theEpoch == 1: 
-                    print("data shape ", data.shape)
-                    plt.imshow(data.data[0, 0, :, :].numpy()),plt.title('data')
+                if print2 and batch_num == 100 and theEpoch == 2: 
+                    print("target shape ", target.shape)
+                    plt.imshow(self.unprepArr(target, target_unbaselined)[0, 0, :, :].numpy()),plt.title('target')
                     plt.xticks([]), plt.yticks([])
                     plt.show()
+
+                    print("prediction shape ", prediction.shape)
+                    plt.imshow(self.unprepArr(prediction, data_unbaselined)[0, 0].detach().numpy()),plt.title('prediction')
+                    plt.xticks([]), plt.yticks([])
+                    plt.show()
+
                     if i == 2 : 
                         print2 = False
                 self.optimizers[i].zero_grad()
-                loss = self.criterion(self.models[i](data), target) / len(datas)
+                loss = self.criterion(prediction, target) / len(datas)
                 train_loss += loss.item()
                 loss.backward()
                 self.optimizers[i].step()
@@ -101,17 +128,23 @@ class SRCNNTrainer(object):
         with torch.no_grad():
             for batch_num, (datas, targets) in enumerate(self.testing_loader):
                 for i in range(len(datas)) : 
-                    data, target = datas[i].to(self.device), targets[i].to(self.device)
+                    data_unbaselined = datas[i if not self.predictColors else 0]
+                    data = self.prepArr(data_unbaselined).to(self.device)
+
+                    target_unbaselined = targets[i]
+                    target = self.prepArr(target_unbaselined).to(self.device)  
+
                     prediction = self.models[i](data)
                     global print1
                     if print1 and batch_num == 0 and theEpoch == self.nEpochs: 
+
                         print("data shape ", data.shape)
-                        plt.imshow(data.data[0, 0, :, :].numpy()),plt.title('data')
+                        plt.imshow(self.unprepArr(data, data_unbaselined)[0, 0, :, :].numpy()),plt.title('data')
                         plt.xticks([]), plt.yticks([])
                         plt.show()
 
                         print("prediction shape ", prediction.shape)
-                        plt.imshow(prediction[0, 0]),plt.title('prediction')
+                        plt.imshow(self.unprepArr(prediction, data_unbaselined)[0, 0].detach().numpy()),plt.title('prediction')
                         plt.xticks([]), plt.yticks([])
                         plt.show()
 

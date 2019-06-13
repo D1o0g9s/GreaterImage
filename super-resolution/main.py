@@ -29,7 +29,8 @@ parser.add_argument('--seed', type=int, default=123, help='random seed to use. D
 parser.add_argument('--upscale_factor', '-uf',  type=int, default=4, help="super resolution upscale factor")
 parser.add_argument('--model', '-m', type=str, default='srcnn', help='choose which model is going to use')
 parser.add_argument('--allColors', '-ac', type=str, default='false', help='true or false: true to train on cr and cb in addtion to y')
-parser.add_argument('--allLayers', '-al', type=str, default='false', help='true or false: true to train 3 separate neural network layers to predict color.')
+parser.add_argument('--allLayers', '-al', type=str, default='false', help='true or false: true to train 3 separate neural network layers to resolve color.')
+parser.add_argument('--predictColors', '-pc', type=str, default='false', help='true or false: true to train 3 separate neural network layers to predict color.')
 parser.add_argument("--outputPath", '-o', type=str, default='model_path.pth', help="the filename to save the model to")
 # training and testing folder
 parser.add_argument('--trainTestFolder', '-t', default="./dataset/MyTrainTest", help="filepath of folder containing train and test images")
@@ -37,6 +38,8 @@ parser.add_argument('--trainTestFolder', '-t', default="./dataset/MyTrainTest", 
 args = parser.parse_args()
 allColors = True if args.allColors.strip().lower() == 'true' else False 
 allLayers = True if args.allLayers.strip().lower() == 'true' else False 
+predictColors = True if args.predictColors.strip().lower() == 'true' else False 
+
 
 def main():
     # ===========================================================
@@ -45,15 +48,15 @@ def main():
     print('===> Loading datasets')
     print("allColors is " + str(allColors))
 
-    train_set = get_training_set(args.trainTestFolder, args.upscale_factor, allColors or allLayers)
-    test_set = get_test_set(args.trainTestFolder, args.upscale_factor, allColors or allLayers)
+    train_set = get_training_set(args.trainTestFolder, args.upscale_factor, allColors or allLayers or predictColors)
+    test_set = get_test_set(args.trainTestFolder, args.upscale_factor, allColors or allLayers or predictColors)
     training_data_loader = DataLoader(dataset=train_set, batch_size=args.batchSize, shuffle=True)
     testing_data_loader = DataLoader(dataset=test_set, batch_size=args.testBatchSize, shuffle=False)
 
     if args.model == 'sub':
         model = SubPixelTrainer(args, training_data_loader, testing_data_loader)
     elif args.model == 'srcnn':
-        model = SRCNNTrainer(args, training_data_loader, testing_data_loader, allLayers)
+        model = SRCNNTrainer(args, training_data_loader, testing_data_loader)
     elif args.model == 'vdsr':
         model = VDSRTrainer(args, training_data_loader, testing_data_loader)
     elif args.model == 'edsr':

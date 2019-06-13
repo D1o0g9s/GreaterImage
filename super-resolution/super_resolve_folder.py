@@ -13,6 +13,7 @@ from math import log10
 from torch.utils.data import DataLoader
 from dataset.dataset import DatasetFromFolder, is_image_file
 from SRCNN.model import Net
+from SRCNN.solver import baseline, original
 
 import numpy as np
 import cv2
@@ -89,7 +90,8 @@ parser.add_argument('--model', '-m', type=str, default='model_path.pth', help='m
 parser.add_argument('--outputBW', '-b', type=str, default='false', help='true for output black and white, false for not')
 parser.add_argument('--verbose', '-v', type=str, default='true', help='true for verbose output, false for not')
 parser.add_argument('--allColors', '-ac', type=str, default='false', help='true or false: true to train on cr and cb in addtion to y')
-parser.add_argument('--allLayers', '-al', type=str, default='false', help='true or false: true to train 3 separate neural network layers to predict color.')
+parser.add_argument('--allLayers', '-al', type=str, default='false', help='true or false: true to train 3 separate neural network layers to resolve color.')
+parser.add_argument('--predictColors', '-pc', type=str, default='false', help='true or false: true to train 3 separate neural network layers to predict color.')
 
 args = parser.parse_args()
 
@@ -108,6 +110,7 @@ verbose = True if args.verbose.strip().lower() == 'true' else False
 
 allColors = True if args.allColors.strip().lower() == 'true' else False 
 allLayers = True if args.allLayers.strip().lower() == 'true' else False 
+predictColors = True if args.predictColors.strip().lower() == 'true' else False 
 
 
 
@@ -134,10 +137,13 @@ results_compare_file.write(report_string)
 
 print1 = False
 
+if GPU_IN_USE:
+        cudnn.benchmark = True
+
 # ===========================================================
 # model import & setting
 # ===========================================================
-numModels = 3 if allLayers else 1
+numModels = 3 if allLayers or predictColors else 1
 device = torch.device('cuda' if GPU_IN_USE else 'cpu')
 models = dict() 
 pathExtension=""
@@ -156,6 +162,12 @@ if(allLayers) :
 else : 
     model_cb = models[0]
     model_cr = models[0]
+
+if predictColors: 
+    prepArr = baseline
+else :
+    prepArr = original
+
 
 for inputFileName in input_image_filenames : 
     
@@ -190,40 +202,37 @@ for inputFileName in input_image_filenames :
     blurry_img = Image.open(myBlurryFile).convert('YCbCr')
     y, cb, cr = blurry_img.split()
 
-
-    data = (ToTensor()(y)).view(1, -1, y.size[1], y.size[0])
-    data = data.to(device)
-
-    if GPU_IN_USE:
-        cudnn.benchmark = True
-    
-        
     # ===========================================================
     # output and save image
     # ===========================================================
+    data_unbaselined = (ToTensor()(y)).view(1, -1, y.size[1], y.size[0])
+    data = prepArr(data_unbaselined).to(device)
     pred = models[0](data)
     out = pred.clone().detach()
     out = out.cpu()
     pred = pred.cpu()
-    out_img_y = out.data[0].numpy()
+    out_img_y = out.data[0].numpy() + (np.nanmean(data_unbaselined) if predictColors else 0)
+
+    print("NANMEAN unbaselined " ,  np.nanmean(data_unbaselined))
+    print("NANMEAN baselined " ,  np.nanmean(data))
+    print("NANMEAN prediction unbaselined " ,  np.nanmean(pred.detach().numpy()))
 
     out_img_y *= 255.0
     out_img_y = out_img_y.clip(0, 255)
     out_img_y = Image.fromarray(np.uint8(out_img_y[0]), mode='L')
 
     if (not outputBW and allColors) :
-        data_cb = (ToTensor()(cb)).view(1, -1, cb.size[1], cb.size[0])
-        data_cb = data_cb.to(device)
+        data_cb_unbaselined = (ToTensor()(cb)).view(1, -1, cb.size[1], cb.size[0])
+        data_cb = prepArr(data_cb_unbaselined).to(device)
         
-        pred_cb = model_cb(data_cb)
-        out_cb = pred_cb.clone().detach()
+        pred_cb = model_cb(data_cb if not predictColors else data)
+        out_cb = (pred_cb + np.nanmean(data_cb_unbaselined)).clone().detach()
 
-        out_img_cb = out_cb.data[0].numpy()
+        out_img_cb = out_cb.data[0].numpy() + (np.nanmean(data_cb_unbaselined) if predictColors else 0)
         out_img_cb *= 255.0
         out_img_cb = out_img_cb.clip(0, 255)
         out_img_cb = Image.fromarray(np.uint8(out_img_cb[0]), mode='L')
         #  print(out_img_cb)
-        data_cr = (ToTensor()(cr)).view(1, -1, cr.size[1], cr.size[0])
         if print1 and inputFileName == '3096.jpg': 
             print("pred shape ", pred.shape)
             plt.imshow(pred[0, 0].detach().numpy()),plt.title('pred')
@@ -236,8 +245,9 @@ for inputFileName in input_image_filenames :
             plt.xticks([]), plt.yticks([])
             plt.show()
 
-        data_cr = data_cr.to(device)
-        pred_cr = model_cr(data_cr)
+        data_cr_unbaselined = (ToTensor()(cr)).view(1, -1, cr.size[1], cr.size[0])
+        data_cr = prepArr(data_cr_unbaselined).to(device)
+        pred_cr = model_cr(data_cr if not predictColors else data)
 
         if print1 and inputFileName == '3096.jpg': 
 
@@ -265,7 +275,7 @@ for inputFileName in input_image_filenames :
 
 
         out_cr = pred_cr.clone().detach()
-        out_img_cr = out_cr.data[0].numpy()
+        out_img_cr = out_cr.data[0].numpy() + (np.nanmean(data_cr_unbaselined) if predictColors else 0)
 
         
         #print(out_img_cr)
