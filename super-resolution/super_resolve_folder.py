@@ -112,6 +112,7 @@ allColors = True if args.allColors.strip().lower() == 'true' else False
 allLayers = True if args.allLayers.strip().lower() == 'true' else False 
 predictColors = True if args.predictColors.strip().lower() == 'true' else False 
 
+print1 = False
 
 # ===========================================================
 # input image setting
@@ -133,8 +134,6 @@ report_string = "resolving image with " + modelPath + " upscaleFactor " + str(4)
 print(report_string)
 results_output_file.write(report_string)
 results_compare_file.write(report_string)
-
-print1 = False
 
 if GPU_IN_USE:
         cudnn.benchmark = True

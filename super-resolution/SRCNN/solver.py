@@ -17,16 +17,31 @@ print2 = False
 inputChannels = 1 # number of channels to input into CNN
 baseFilter = 64 # number of channels to output in the first Conv layer in CNN
 theEpoch = 0
-
+edgeCaseCount = 0
+invalidTensorCount = 0
 def baseline(arr) :
+    global edgeCaseCount
+    global invalidTensorCount
     tensorArr = arr.clone()
     if(torch.max(tensorArr) - torch.min(tensorArr) != 0) :
         toReturn = (tensorArr - torch.min(tensorArr)) / (torch.max(tensorArr) - torch.min(tensorArr)) 
     else: 
-        toReturn = tensorArr
+        if torch.min(tensorArr) < 0 : 
+            edgeCaseCount += 1
+            toReturn = tensorArr * 0 
+        elif torch.min(tensorArr) > 1: 
+            edgeCaseCount += 1
+            toReturn = tensorArr - torch.min(tensorArr) + 1
+        else : 
+            toReturn = tensorArr
+        
     #print("min " + str( torch.min(toReturn)) +  " max " + str(torch.max(toReturn)))
     if torch.min(toReturn) < 0 : 
+        invalidTensorCount += 1 
         print( "BASELINE MIN IS NEGATIVE AHHHHHHHHHH")
+    if torch.max(toReturn) > 1 : 
+        invalidTensorCount += 1 
+        print( "BASELINE MAX IS GREATER THAN 1 AHHHHHHHHHH")
 
     return toReturn
 
@@ -34,13 +49,31 @@ def original(arr, arr_original=None):
     return arr.clone()
 
 def unbaseline(arr, arr_unbaselined) :
+    global edgeCaseCount
+    global invalidTensorCount
     tensorArr = arr.clone()
     tensorUnbaselined = arr_unbaselined.clone()
     #print(tensorArr.data.numpy())
-    toReturn = ((torch.max(tensorUnbaselined) - torch.min(tensorUnbaselined)) * tensorArr) + torch.min(tensorUnbaselined)
+    if (torch.max(tensorUnbaselined) - torch.min(tensorUnbaselined) != 0) :
+        toReturn = ((torch.max(tensorUnbaselined) - torch.min(tensorUnbaselined)) * tensorArr) + torch.min(tensorUnbaselined)
+    else : 
+        if torch.min(tensorUnbaselined) < 0: 
+            edgeCaseCount += 1
+            toReturn = tensorArr * 0 
+        elif torch.min(tensorUnbaselined) > 1: 
+            edgeCaseCount += 1
+            toReturn = tensorArr - torch.min(tensorArr) + 1
+        else :
+            edgeCaseCount += 1
+            toReturn = tensorArr + torch.min(tensorUnbaselined)
+
     #print("min " + str( torch.min(toReturn)) +  " max " + str(torch.max(toReturn)))
     if torch.min(toReturn) < 0: 
+        invalidTensorCount += 1 
         print("UNBASELINE MIN IS NEGATIVE AHHHH")
+    if torch.max(toReturn) > 1 :
+        invalidTensorCount += 1  
+        print( "UNBASELINE MAX IS GREATER THAN 1 AHHHHHHHHHH")
     return toReturn
 
 class SRCNNTrainer(object):
@@ -95,7 +128,8 @@ class SRCNNTrainer(object):
                 print(param_tensor, "\t", self.models[i].state_dict()[param_tensor].size())
             model_out_extender = model_out_extender + "_"
 
-
+        print("NUM edgecases ", edgeCaseCount)
+        print("NUM invalid tensors ", invalidTensorCount)
         print("Checkpoint saved to {}".format(model_out_name))
 
 
