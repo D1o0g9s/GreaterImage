@@ -9,22 +9,39 @@ from SRCNN.model import Net
 from progress_bar import progress_bar
 from matplotlib import pyplot as plt
 import numpy as np
+import math 
 
 
-print1 = False
+print1 = False 
 print2 = False
 inputChannels = 1 # number of channels to input into CNN
 baseFilter = 64 # number of channels to output in the first Conv layer in CNN
 theEpoch = 0
 
 def baseline(arr) :
-    return arr - np.nanmean(arr) 
+    tensorArr = arr.clone()
+    if(torch.max(tensorArr) - torch.min(tensorArr) != 0) :
+        toReturn = (tensorArr - torch.min(tensorArr)) / (torch.max(tensorArr) - torch.min(tensorArr)) 
+    else: 
+        toReturn = tensorArr
+    #print("min " + str( torch.min(toReturn)) +  " max " + str(torch.max(toReturn)))
+    if torch.min(toReturn) < 0 : 
+        print( "BASELINE MIN IS NEGATIVE AHHHHHHHHHH")
 
-def original(arr):
-    return arr
+    return toReturn
+
+def original(arr, arr_original=None):
+    return arr.clone()
 
 def unbaseline(arr, arr_unbaselined) :
-    return arr + np.nanmean(arr_unbaselined)
+    tensorArr = arr.clone()
+    tensorUnbaselined = arr_unbaselined.clone()
+    #print(tensorArr.data.numpy())
+    toReturn = ((torch.max(tensorUnbaselined) - torch.min(tensorUnbaselined)) * tensorArr) + torch.min(tensorUnbaselined)
+    #print("min " + str( torch.min(toReturn)) +  " max " + str(torch.max(toReturn)))
+    if torch.min(toReturn) < 0: 
+        print("UNBASELINE MIN IS NEGATIVE AHHHH")
+    return toReturn
 
 class SRCNNTrainer(object):
     def __init__(self, config, training_loader, testing_loader):
@@ -38,10 +55,10 @@ class SRCNNTrainer(object):
         self.upscale_factor = config.upscale_factor
         self.training_loader = training_loader
         self.testing_loader = testing_loader
+        self.allColors = True if config.allColors.strip().lower() == 'true' else False
+        self.allLayers = True if config.allLayers.strip().lower() == 'true' else False 
 
-        allLayers = True if config.allLayers.strip().lower() == 'true' else False 
-
-        self.numModels = 3 if allLayers else 1
+        self.numModels = 3 if self.allLayers else 1
         self.outputFilepath = config.outputPath
         self.predictColors = True if config.predictColors.strip().lower() == 'true' else False
         self.prepArr = baseline if self.predictColors else original
@@ -94,27 +111,46 @@ class SRCNNTrainer(object):
 
                 target_unbaselined = targets[i]
                 target = self.prepArr(target_unbaselined).to(self.device)
+                
 
                 prediction = self.models[i](data)
+                prediction_squeezed = self.prepArr(prediction)
+                prediction_unbaselined = self.unprepArr(prediction_squeezed, data_unbaselined)
+
+                self.optimizers[i].zero_grad()
+                loss = self.criterion(prediction_squeezed, target) 
+
+
+                train_loss += loss.item()
+                loss.backward()
+                self.optimizers[i].step()
+
+
                 global print2
-                if print2 and batch_num == 100 and theEpoch == 2: 
+                if print2 and math.isnan(loss.item()) : #batch_num == 3 and theEpoch == 2: 
+                    print("data min and max " ,  torch.min(data), " ", torch.max(data))
+                    print("pred min and max " ,  torch.min(prediction_squeezed), " ", torch.max(prediction_squeezed))
+                    print("target min and max " ,  torch.min(target), " ", torch.max(target))
+                    print("target_unbaselined min and max " ,  torch.min(target_unbaselined), " ", torch.max(target_unbaselined))
+                    print("target_unbaselined ", target_unbaselined)
+                    print("target ", target)
                     print("target shape ", target.shape)
-                    plt.imshow(self.unprepArr(target, target_unbaselined)[0, 0, :, :].numpy()),plt.title('target')
+                    plt.imshow(self.unprepArr(target, target_unbaselined)[0, 0].detach().numpy()),plt.title('train target ' + str(i))
+                    plt.xticks([]), plt.yticks([])
+                    plt.show()
+
+                    print("data shape ", data.shape)
+                    plt.imshow(self.unprepArr(data, data_unbaselined)[0, 0].detach().numpy()),plt.title('train data' + str(i))
                     plt.xticks([]), plt.yticks([])
                     plt.show()
 
                     print("prediction shape ", prediction.shape)
-                    plt.imshow(self.unprepArr(prediction, data_unbaselined)[0, 0].detach().numpy()),plt.title('prediction')
+                    plt.imshow(prediction[0,0].detach().numpy()),plt.title('train prediction' + str(i))
                     plt.xticks([]), plt.yticks([])
                     plt.show()
 
                     if i == 2 : 
                         print2 = False
-                self.optimizers[i].zero_grad()
-                loss = self.criterion(prediction, target) / len(datas)
-                train_loss += loss.item()
-                loss.backward()
-                self.optimizers[i].step()
             progress_bar(batch_num, len(self.training_loader), 'Loss: %.4f' % (train_loss / (batch_num + 1)))
 
         print("    Average Loss: {:.4f}".format(train_loss / len(self.training_loader)))
@@ -133,8 +169,17 @@ class SRCNNTrainer(object):
 
                     target_unbaselined = targets[i]
                     target = self.prepArr(target_unbaselined).to(self.device)  
-
+                    
+                    
                     prediction = self.models[i](data)
+                    prediction_squeezed = self.prepArr(prediction)
+                    prediction_unbaselined = self.unprepArr(prediction_squeezed, data_unbaselined)
+
+                    mse = self.criterion(prediction_squeezed, target)
+                    psnr = 10 * log10(1 / mse.item())
+                    avg_psnr += psnr
+
+
                     global print1
                     if print1 and batch_num == 0 and theEpoch == self.nEpochs: 
 
@@ -144,15 +189,12 @@ class SRCNNTrainer(object):
                         plt.show()
 
                         print("prediction shape ", prediction.shape)
-                        plt.imshow(self.unprepArr(prediction, data_unbaselined)[0, 0].detach().numpy()),plt.title('prediction')
+                        plt.imshow(prediction[0,0].detach().numpy()),plt.title('prediction')
                         plt.xticks([]), plt.yticks([])
                         plt.show()
 
                         if i == 2 : 
                             print1 = False
-                    mse = self.criterion(prediction, target) / len(datas)
-                    psnr = 10 * log10(1 / mse.item())
-                    avg_psnr += psnr
                 progress_bar(batch_num, len(self.testing_loader), 'PSNR: %.4f' % (avg_psnr / (batch_num + 1)))
 
         print("    Average PSNR: {:.4f} dB".format(avg_psnr / len(self.testing_loader)))

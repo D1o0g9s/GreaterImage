@@ -13,7 +13,7 @@ from math import log10
 from torch.utils.data import DataLoader
 from dataset.dataset import DatasetFromFolder, is_image_file
 from SRCNN.model import Net
-from SRCNN.solver import baseline, original
+from SRCNN.solver import baseline, original, unbaseline
 
 import numpy as np
 import cv2
@@ -113,13 +113,12 @@ allLayers = True if args.allLayers.strip().lower() == 'true' else False
 predictColors = True if args.predictColors.strip().lower() == 'true' else False 
 
 
-
 # ===========================================================
 # input image setting
 # ===========================================================
 GPU_IN_USE = torch.cuda.is_available()
 myBlurryFile = 'blurry.jpg'
-psnrs = list()
+metrics = list()
 
 if not os.path.exists(outputFolder) :
     os.makedirs(outputFolder)
@@ -163,10 +162,10 @@ else :
     model_cb = models[0]
     model_cr = models[0]
 
-if predictColors: 
-    prepArr = baseline
-else :
-    prepArr = original
+
+
+prepArr = baseline if predictColors else original
+unprepArr = unbaseline if predictColors else original
 
 
 for inputFileName in input_image_filenames : 
@@ -205,92 +204,99 @@ for inputFileName in input_image_filenames :
     # ===========================================================
     # output and save image
     # ===========================================================
+
+    # y
     data_unbaselined = (ToTensor()(y)).view(1, -1, y.size[1], y.size[0])
     data = prepArr(data_unbaselined).to(device)
     pred = models[0](data)
-    out = pred.clone().detach()
+    pred_squeezed = prepArr(pred)
+    out = pred_squeezed.clone().detach()
     out = out.cpu()
-    pred = pred.cpu()
-    out_img_y = out.data[0].numpy() + (np.nanmean(data_unbaselined) if predictColors else 0)
+    
+    out_img_y = unprepArr(out, data_unbaselined).data.numpy()
 
-    print("NANMEAN unbaselined " ,  np.nanmean(data_unbaselined))
-    print("NANMEAN baselined " ,  np.nanmean(data))
-    print("NANMEAN prediction unbaselined " ,  np.nanmean(pred.detach().numpy()))
-
-    out_img_y *= 255.0
-    out_img_y = out_img_y.clip(0, 255)
-    out_img_y = Image.fromarray(np.uint8(out_img_y[0]), mode='L')
+    out_img_y_image = out_img_y * 255.0
+    out_img_y_image = out_img_y_image.clip(0, 255)
+    out_img_y_image = Image.fromarray(np.uint8(out_img_y_image[0,0]), mode='L')
 
     if (not outputBW and allColors) :
-        data_cb_unbaselined = (ToTensor()(cb)).view(1, -1, cb.size[1], cb.size[0])
+        # cb 
+        data_cb_unbaselined = (ToTensor()(cb)).view(1, -1, cb.size[1], cb.size[0]) if not predictColors else data_unbaselined
         data_cb = prepArr(data_cb_unbaselined).to(device)
         
-        pred_cb = model_cb(data_cb if not predictColors else data)
-        out_cb = (pred_cb + np.nanmean(data_cb_unbaselined)).clone().detach()
+        pred_cb = model_cb(data_cb)
+        pred_cb_squeezed = prepArr(pred_cb)
+        out_cb = pred_cb_squeezed.clone().detach()
+        out_cb = out_cb.cpu()
 
-        out_img_cb = out_cb.data[0].numpy() + (np.nanmean(data_cb_unbaselined) if predictColors else 0)
-        out_img_cb *= 255.0
-        out_img_cb = out_img_cb.clip(0, 255)
-        out_img_cb = Image.fromarray(np.uint8(out_img_cb[0]), mode='L')
-        #  print(out_img_cb)
-        if print1 and inputFileName == '3096.jpg': 
-            print("pred shape ", pred.shape)
-            plt.imshow(pred[0, 0].detach().numpy()),plt.title('pred')
-            plt.xticks([]), plt.yticks([])
-            plt.show()
+        out_img_cb = unprepArr(out_cb, data_cb_unbaselined).data.numpy()
+
+        out_img_cb_image = out_img_cb * 255.0
+        out_img_cb_image = out_img_cb_image.clip(0, 255)
+        out_img_cb_image = Image.fromarray(np.uint8(out_img_cb_image[0,0]), mode='L')
 
 
-            print("data_cb shape ", data_cb.shape)
-            plt.imshow(data_cb[0, 0].detach().numpy()),plt.title('data_cb')
-            plt.xticks([]), plt.yticks([])
-            plt.show()
-
-        data_cr_unbaselined = (ToTensor()(cr)).view(1, -1, cr.size[1], cr.size[0])
+        # cr
+        data_cr_unbaselined = (ToTensor()(cr)).view(1, -1, cr.size[1], cr.size[0]) if not predictColors else data_unbaselined
         data_cr = prepArr(data_cr_unbaselined).to(device)
-        pred_cr = model_cr(data_cr if not predictColors else data)
 
+        pred_cr = model_cr(data_cr)
+        pred_cr_squeezed = prepArr(pred_cr)
+        out_cr = pred_cr_squeezed.clone().detach()
+        out_cr = out_cr.cpu()
+
+        out_img_cr = unprepArr(out_cr, data_cr_unbaselined).data.numpy()
+
+        out_img_cr_image = out_img_cr * 255.0
+        out_img_cr_image = out_img_cr_image.clip(0, 255)
+        out_img_cr_image = Image.fromarray(np.uint8(out_img_cr_image[0,0]), mode='L')
+
+        # debug prints
         if print1 and inputFileName == '3096.jpg': 
+            # y data, prediction
 
-            print("data_cb shape ", data_cb.shape)
-            plt.imshow(data_cb[0, 0].detach().numpy()),plt.title('data_cb')
+            print("data_unbaselined shape ", data_unbaselined.shape)
+            plt.imshow(data_unbaselined[0,0]),plt.title('data_unbaselined data')
             plt.xticks([]), plt.yticks([])
             plt.show()
 
-            print("pred_cb shape ", pred_cb.shape)
-            plt.imshow(pred_cb[0, 0].detach().numpy()),plt.title('pred_cb')
+            print("out_img_y shape ", out_img_y.shape)
+            plt.imshow(out_img_y[0,0]),plt.title('out_img_y prediction')
             plt.xticks([]), plt.yticks([])
             plt.show()
 
-            print("data_cr shape ", data_cr.shape)
-            plt.imshow(data_cr[0, 0]),plt.title('data_cr')
+            print("data_cb_unbaselined shape ", data_cb_unbaselined.shape)
+            plt.imshow(data_cb_unbaselined[0,0]),plt.title('data_cb_unbaselined data')
             plt.xticks([]), plt.yticks([])
             plt.show()
 
-            print("pred_cr shape ", pred_cr.shape)
-            plt.imshow(pred_cr[0, 0].detach().numpy()),plt.title('pred_cr')
+            print("out_img_cb shape ", out_img_cb.shape)
+            plt.imshow(out_img_cb[0,0]),plt.title('out_img_cb prediction')
+            plt.xticks([]), plt.yticks([])
+            plt.show()
+
+            print("data_cr_unbaselined shape ", data_cr_unbaselined.shape)
+            plt.imshow(data_cr_unbaselined[0,0]),plt.title('data_cr_unbaselined data')
+            plt.xticks([]), plt.yticks([])
+            plt.show()
+
+            print("out_img_cr shape ", out_img_cr.shape)
+            plt.imshow(out_img_cr[0,0]),plt.title('out_img_cr prediction')
             plt.xticks([]), plt.yticks([])
             plt.show()
             print1 = False
-
-
-
-        out_cr = pred_cr.clone().detach()
-        out_img_cr = out_cr.data[0].numpy() + (np.nanmean(data_cr_unbaselined) if predictColors else 0)
-
-        
-        #print(out_img_cr)
-        out_img_cr *= 255.0
-        out_img_cr = out_img_cr.clip(0, 255)
-        out_img_cr = Image.fromarray(np.uint8(out_img_cr[0]), mode='L')
     elif (not outputBW):
         # original
-        out_img_cb = cb.resize(out_img_y.size, Image.BICUBIC)
-        out_img_cr = cr.resize(out_img_y.size, Image.BICUBIC)
+        out_img_cb_image = cb.resize(out_img_y_image.size, Image.BICUBIC)
+        out_img_cr_image = cr.resize(out_img_y_image.size, Image.BICUBIC)
     elif (outputBW) :
-        out_img_cb = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y.size).numpy())), mode='L')
-        out_img_cr = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y.size).numpy())), mode='L')
+        # make cb and cr "zeroed"
+        out_img_cb_image = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y_image.size).numpy())), mode='L')
+        out_img_cr_image = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y_image.size).numpy())), mode='L')
     
-    out_img = Image.merge('YCbCr', [out_img_y, out_img_cb, out_img_cr]).convert('RGB')
+
+
+    out_img = Image.merge('YCbCr', [out_img_y_image, out_img_cb_image, out_img_cr_image]).convert('RGB')
     outputPath = join(outputFolder, "output_" + inputFileName)
     out_img.save(outputPath)
     
@@ -299,23 +305,25 @@ for inputFileName in input_image_filenames :
     # ===========================================================
     # calculate metrics and save compare image
     # ===========================================================
+    criterion = ssim #torch.nn.MSELoss()
 
     original_data = (ToTensor()(original_y)).view(1, -1, original_y.size[1], original_y.size[0])
-    pred, original_data = enshape(pred, original_data)
-    criterion = ssim #torch.nn.MSELoss()
-    ssim_mse = criterion(pred[0,0].detach().numpy(), original_data[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
+    #print("out_img_y shape ", out_img_y.shape)
+    #print("original_data shape ", original_data.shape)
+    out_img_y, original_data = enshape(out_img_y, original_data)
+    metric_value = criterion(out_img_y[0,0], original_data[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
 
     if(not outputBW and allColors) :
         original_data_cb = (ToTensor()(original_cb)).view(1, -1, original_cb.size[1], original_cb.size[0])
         original_data_cr = (ToTensor()(original_cr)).view(1, -1, original_cr.size[1], original_cr.size[0])
-        pred_cb, original_data_cb = enshape(pred_cb, original_data_cb)
-        pred_cr, original_data_cr = enshape(pred_cr, original_data_cr)
-        ssim_mse += criterion(pred_cr[0,0].detach().numpy(), original_data_cr[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
-        ssim_mse += criterion(pred_cb[0,0].detach().numpy(), original_data_cb[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
-        ssim_mse = ssim_mse / 3
+        out_img_cb, original_data_cb = enshape(out_img_cb, original_data_cb)
+        out_img_cr, original_data_cr = enshape(out_img_cr, original_data_cr)
+        metric_value += criterion(out_img_cb[0,0], original_data_cr[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
+        metric_value += criterion(out_img_cr[0,0], original_data_cb[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
+        metric_value = metric_value / 3
 
-    ssim_value = ssim_mse.item() #10 * log10(1 / mse.item())
-    report_string = inputFileName + "\t ssim between original = " + str(ssim_value) + "\n"
+    metric_value = metric_value.item() #10 * log10(1 / mse.item())
+    report_string = inputFileName + "\t ssim between original = " + str(metric_value) + "\n"
     if(verbose) :
         print(report_string, end="")
     results_output_file.write(report_string)
@@ -327,14 +335,14 @@ for inputFileName in input_image_filenames :
     compare_img = concat_images(np.array(blurry_img), np.array(out_img))
     compare_img = Image.fromarray(concat_images(np.array(compare_img), np.array(original_img)).astype('uint8'))
     draw = ImageDraw.Draw(compare_img)
-    draw.text((0, 0),"SSIM " + str(ssim_value), fill=(255,255,255))
+    draw.text((0, 0),"SSIM " + str(metric_value), fill=(255,255,255))
 
     comparePath = join(compareFolder, "compare_" + inputFileName)
     compare_img.save(comparePath)
 
-    psnrs.append(ssim_value)
+    metrics.append(metric_value)
 
-report_string = str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(psnrs)) + "\n"
+report_string = str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(metrics)) + "\n"
 print(report_string, end="")
 results_output_file.write(report_string)
 results_compare_file.write(report_string)

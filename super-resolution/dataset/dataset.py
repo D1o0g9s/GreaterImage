@@ -2,10 +2,11 @@ from os import listdir
 from os.path import join
 
 import torch.utils.data as data
+import torch
 from PIL import Image
 
 from matplotlib import pyplot as plt
-
+import numpy as np
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in [".png", ".jpg", ".jpeg"])
@@ -47,17 +48,25 @@ class DatasetFromFolder(data.Dataset):
                 target_cr = self.target_transform(target_cr)
             global print1
             if print1 : 
-                print("cr shape ", cr.shape)
-                plt.imshow(cr.data[0, :, :].numpy()),plt.title('cr')
+                
+                print("cb shape ", cb.shape)
+                plt.imshow(cb.data[0].detach().numpy()),plt.title('cb')
                 plt.xticks([]), plt.yticks([])
                 plt.show()
+
+
+                print("cr shape ", cr.shape)
+                plt.imshow(cr.data[0].detach().numpy()),plt.title('cr')
+                plt.xticks([]), plt.yticks([])
+                plt.show()
+
+
                 print1=False
             input_images = [input_image, cb, cr]
             targets = [target, target_cb, target_cr]
         else : 
             input_images = [input_image]
             targets = [target]
-
         return input_images, targets
 
     def __len__(self):
