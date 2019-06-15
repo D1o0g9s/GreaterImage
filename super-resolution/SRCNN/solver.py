@@ -147,17 +147,17 @@ class SRCNNTrainer(object):
                 target = self.prepArr(target_unbaselined).to(self.device)
                 
 
-                prediction = self.models[i](data)
+                prediction = self.models[i if self.allLayers else 0](data)
                 prediction_squeezed = self.prepArr(prediction)
                 prediction_unbaselined = self.unprepArr(prediction_squeezed, data_unbaselined)
 
-                self.optimizers[i].zero_grad()
+                self.optimizers[i if self.allLayers else 0].zero_grad()
                 loss = self.criterion(prediction_squeezed, target) 
 
 
                 train_loss += loss.item()
                 loss.backward()
-                self.optimizers[i].step()
+                self.optimizers[i if self.allLayers else 0].step()
 
 
                 global print2
@@ -205,7 +205,7 @@ class SRCNNTrainer(object):
                     target = self.prepArr(target_unbaselined).to(self.device)  
                     
                     
-                    prediction = self.models[i](data)
+                    prediction = self.models[i if self.allLayers else 0](data)
                     prediction_squeezed = self.prepArr(prediction)
                     prediction_unbaselined = self.unprepArr(prediction_squeezed, data_unbaselined)
 

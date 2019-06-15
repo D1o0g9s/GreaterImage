@@ -130,7 +130,10 @@ results_output_file = open(join(outputFolder, "results.txt"),"w+")
 results_compare_file = open(join(compareFolder, "results.txt"),"w+")
 image_count = 0
 
-report_string = "resolving image with " + modelPath + " upscaleFactor " + str(4) + " BWouput=" +  str(outputBW) + " allColors=" + str(allColors) + " allLayers=" + str(allLayers) +"\n"
+report_string = ("Model " + modelPath + " upscaleFactor " + str(4) 
+        + " outputBW=" +  str(outputBW) + " allColors=" + str(allColors) + " allLayers=" 
+        + str(allLayers) + " predictColors=" + str(predictColors) +"\n")
+
 print(report_string)
 results_output_file.write(report_string)
 results_compare_file.write(report_string)
@@ -234,7 +237,6 @@ for inputFileName in input_image_filenames :
         out_img_cb_image = out_img_cb_image.clip(0, 255)
         out_img_cb_image = Image.fromarray(np.uint8(out_img_cb_image[0,0]), mode='L')
 
-
         # cr
         data_cr_unbaselined = (ToTensor()(cr)).view(1, -1, cr.size[1], cr.size[0]) if not predictColors else data_unbaselined
         data_cr = prepArr(data_cr_unbaselined).to(device)
@@ -293,8 +295,6 @@ for inputFileName in input_image_filenames :
         out_img_cb_image = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y_image.size).numpy())), mode='L')
         out_img_cr_image = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y_image.size).numpy())), mode='L')
     
-
-
     out_img = Image.merge('YCbCr', [out_img_y_image, out_img_cb_image, out_img_cr_image]).convert('RGB')
     outputPath = join(outputFolder, "output_" + inputFileName)
     out_img.save(outputPath)
@@ -329,6 +329,10 @@ for inputFileName in input_image_filenames :
     results_compare_file.write(report_string)
     upscale(myBlurryFile, upscaleFactor)
     blurry_img = Image.open(myBlurryFile).convert('RGB')
+    if predictColors : 
+        blurry_img = blurry_img.convert('L')
+        blurry_img = Image.merge('RGB', [blurry_img, blurry_img, blurry_img])
+
     original_img = Image.open(inputFilePath).convert('RGB')
 
     compare_img = concat_images(np.array(blurry_img), np.array(out_img))
@@ -341,7 +345,7 @@ for inputFileName in input_image_filenames :
 
     metrics.append(metric_value)
 
-report_string = str(len(input_image_filenames)) + " files. Average psnr " + str(np.average(metrics)) + "\n"
+report_string = str(len(input_image_filenames)) + " files. Average ssim " + str(np.average(metrics)) + "\n"
 print(report_string, end="")
 results_output_file.write(report_string)
 results_compare_file.write(report_string)
