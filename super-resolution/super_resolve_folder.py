@@ -68,15 +68,21 @@ def concat_images(img_a, img_b):
     return new_img
 
 def enshape(pred, original_data) :
-    if(pred.shape[2] > original_data.shape[2]) :
-        pred = pred[:, :, :original_data.shape[2], :]
-    if(pred.shape[2] < original_data.shape[2]) :
-        original_data = original_data[:, :, :pred.shape[2], :]
-    if(pred.shape[3] > original_data.shape[3]) :
-        pred = pred[:, :, :, :original_data.shape[3]]
-    if(pred.shape[3] < original_data.shape[3]) :
-        original_data = original_data[:, :, :, :pred.shape[3]]
+    firstDim = 0
+    secondDim = 1
+    if(pred.shape[firstDim] > original_data.shape[firstDim]) :
+        pred = pred[:original_data.shape[firstDim], :]
+    if(pred.shape[firstDim] < original_data.shape[firstDim]) :
+        original_data = original_data[:pred.shape[firstDim], :]
+    if(pred.shape[secondDim] > original_data.shape[secondDim]) :
+        pred = pred[:, :original_data.shape[secondDim]]
+    if(pred.shape[secondDim] < original_data.shape[secondDim]) :
+        original_data = original_data[:, :pred.shape[secondDim]]
     return pred, original_data
+
+def getPredData (image) :
+    toReturn = np.array(image) / 255
+    return toReturn
 
 # ===========================================================
 # argument + constant settings
@@ -112,7 +118,7 @@ allColors = True if args.allColors.strip().lower() == 'true' else False
 allLayers = True if args.allLayers.strip().lower() == 'true' else False 
 predictColors = True if args.predictColors.strip().lower() == 'true' else False 
 
-print1 = False
+print1 = True
 
 # ===========================================================
 # input image setting
@@ -252,40 +258,7 @@ for inputFileName in input_image_filenames :
         out_img_cr_image = out_img_cr_image.clip(0, 255)
         out_img_cr_image = Image.fromarray(np.uint8(out_img_cr_image[0,0]), mode='L')
 
-        # debug prints
-        if print1 and inputFileName == '3096.jpg': 
-            # y data, prediction
-
-            print("data_unbaselined shape ", data_unbaselined.shape)
-            plt.imshow(data_unbaselined[0,0]),plt.title('data_unbaselined data')
-            plt.xticks([]), plt.yticks([])
-            plt.show()
-
-            print("out_img_y shape ", out_img_y.shape)
-            plt.imshow(out_img_y[0,0]),plt.title('out_img_y prediction')
-            plt.xticks([]), plt.yticks([])
-            plt.show()
-
-            print("data_cb_unbaselined shape ", data_cb_unbaselined.shape)
-            plt.imshow(data_cb_unbaselined[0,0]),plt.title('data_cb_unbaselined data')
-            plt.xticks([]), plt.yticks([])
-            plt.show()
-
-            print("out_img_cb shape ", out_img_cb.shape)
-            plt.imshow(out_img_cb[0,0]),plt.title('out_img_cb prediction')
-            plt.xticks([]), plt.yticks([])
-            plt.show()
-
-            print("data_cr_unbaselined shape ", data_cr_unbaselined.shape)
-            plt.imshow(data_cr_unbaselined[0,0]),plt.title('data_cr_unbaselined data')
-            plt.xticks([]), plt.yticks([])
-            plt.show()
-
-            print("out_img_cr shape ", out_img_cr.shape)
-            plt.imshow(out_img_cr[0,0]),plt.title('out_img_cr prediction')
-            plt.xticks([]), plt.yticks([])
-            plt.show()
-            print1 = False
+        
     elif (not outputBW):
         # original
         out_img_cb_image = cb.resize(out_img_y_image.size, Image.BICUBIC)
@@ -294,6 +267,7 @@ for inputFileName in input_image_filenames :
         # make cb and cr "zeroed"
         out_img_cb_image = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y_image.size).numpy())), mode='L')
         out_img_cr_image = Image.fromarray(np.transpose(128*np.uint8(torch.ones(out_img_y_image.size).numpy())), mode='L')
+    
     
     out_img = Image.merge('YCbCr', [out_img_y_image, out_img_cb_image, out_img_cr_image]).convert('RGB')
     outputPath = join(outputFolder, "output_" + inputFileName)
@@ -309,16 +283,23 @@ for inputFileName in input_image_filenames :
     original_data = (ToTensor()(original_y)).view(1, -1, original_y.size[1], original_y.size[0])
     #print("out_img_y shape ", out_img_y.shape)
     #print("original_data shape ", original_data.shape)
-    out_img_y, original_data = enshape(out_img_y, original_data)
-    metric_value = criterion(out_img_y[0,0], original_data[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
+    out_img_y = getPredData(out_img_y_image)
+    out_img_y, original_data = enshape(out_img_y, original_data[0,0])
+    metric_value = criterion(out_img_y, original_data.detach().numpy()) # need to add .detach().numpy() if using ssim
 
-    if(not outputBW and allColors) :
+    
+    
+    if(not outputBW) :
         original_data_cb = (ToTensor()(original_cb)).view(1, -1, original_cb.size[1], original_cb.size[0])
         original_data_cr = (ToTensor()(original_cr)).view(1, -1, original_cr.size[1], original_cr.size[0])
-        out_img_cb, original_data_cb = enshape(out_img_cb, original_data_cb)
-        out_img_cr, original_data_cr = enshape(out_img_cr, original_data_cr)
-        metric_value += criterion(out_img_cb[0,0], original_data_cr[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
-        metric_value += criterion(out_img_cr[0,0], original_data_cb[0,0].detach().numpy()) # need to add .detach().numpy() if using ssim
+        
+        out_img_cb = getPredData(out_img_cb_image)
+        out_img_cr = getPredData(out_img_cr_image)
+
+        out_img_cb, original_data_cb = enshape(out_img_cb, original_data_cb[0,0])
+        out_img_cr, original_data_cr = enshape(out_img_cr, original_data_cr[0,0])
+        metric_value += criterion(out_img_cb, original_data_cr.detach().numpy()) # need to add .detach().numpy() if using ssim
+        metric_value += criterion(out_img_cr, original_data_cb.detach().numpy()) # need to add .detach().numpy() if using ssim
         metric_value = metric_value / 3
 
     metric_value = metric_value.item() #10 * log10(1 / mse.item())
@@ -328,6 +309,44 @@ for inputFileName in input_image_filenames :
     results_output_file.write(report_string)
     results_compare_file.write(report_string)
     upscale(myBlurryFile, upscaleFactor)
+
+    # debug prints
+    if print1: 
+        # y data, prediction
+        print("y shape ", np.array(y).shape)
+        plt.subplot(121), plt.imshow(np.array(y)),plt.title('y data' )
+        plt.xticks([]), plt.yticks([])
+
+        print("y pred shape ", np.array(out_img_y_image).shape)
+        plt.subplot(122), plt.imshow(np.array(out_img_y_image)),plt.title('pred y ' + str(metric_value))
+        plt.xticks([]), plt.yticks([])
+        plt.show()
+
+        print("cb shape ", np.array(cb).shape)
+        plt.subplot(121), plt.imshow(np.array(cb)),plt.title('cb data')
+        plt.xticks([]), plt.yticks([])
+
+        print("cb pred shape ", np.array(out_img_cb_image).shape)
+        plt.subplot(122), plt.imshow(np.array(out_img_cb_image)),plt.title('pred cb ' + str(metric_value))
+        plt.xticks([]), plt.yticks([])
+        plt.show()
+
+        print("cb shape ", np.array(cr).shape)
+        plt.subplot(121), plt.imshow(np.array(cr)),plt.title('cr data')
+        plt.xticks([]), plt.yticks([])
+
+        print("cr pred shape ", np.array(out_img_cr_image).shape)
+        plt.subplot(122), plt.imshow(np.array(out_img_cr_image)),plt.title('pred cr ' + str(metric_value))
+        plt.xticks([]), plt.yticks([])
+        plt.show()
+
+        print1 = False
+
+
+
+
+
+    # Concatenate and output images
     blurry_img = Image.open(myBlurryFile).convert('RGB')
     if predictColors : 
         blurry_img = blurry_img.convert('L')
